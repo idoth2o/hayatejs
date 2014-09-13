@@ -1,6 +1,11 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <vector>
+#include <cstdlib>
+#include <string>
+#include <typeinfo>
+
 #include "v8.h"
 #include <stdio.h>
 #include <string.h>
@@ -40,14 +45,8 @@ int httpserver_bindsocket(int port, int backlog) {
   return nfd;
 }
 
-static void run(struct evhttp_request *req,void *obj){
-         struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
-         evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
-         //evbuffer_add_printf(OutBuf,content);
-         evhttp_send_reply(req, HTTP_OK, "", OutBuf);
-}
-
 __thread char *req_global;
+
 
 void getUrl(const v8::FunctionCallbackInfo<v8::Value>& info) {
 	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
@@ -56,7 +55,8 @@ void getUrl(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }
 
 class Worker{
-
+	//std::mutex mtx;
+	
 	struct event_base *base;
     struct evhttp *httpd;
     const char *req_path;
@@ -83,21 +83,25 @@ public:
     	jsScript = new char[size];
     	jsScript[size - 1] = '\0';
     	ifs.read(jsScript, size);
+#ifdef DEBUG
     	std::cout << "[" << jsScript << "]" << std::endl;
+#endif
     	ifs.close();
     	return EXIT_SUCCESS;
 	}
 void init(int nfd) {
-	char *str = "/start";
+    //std::lock_guard<std::mutex> lock(mtx);
+	std::string str = "/start";
 	req_global = new char[255];
-	strcpy(req_global, str); 
+	strcpy(req_global, str.c_str()); 
 	
 	//++num;
 	base = event_init();
 	httpd = evhttp_new(base);
 	evhttp_accept_socket(httpd, nfd);
 	
-	loadScript();
+	if(loadScript() == EXIT_FAILURE)
+		return;
 	
 	    isolate = Isolate::New();
     	//Locker lock(isolate);
@@ -137,13 +141,12 @@ void init(int nfd) {
 		((Worker*)obj)->run(req);
 	}
 	void run(struct evhttp_request *req){
-		
-		
-		//std::cout << *utf8 <<   __PRETTY_FUNCTION__ << pthread_self() << std::endl;
-		
+#ifdef DEBUG
+		std::cout << *utf8 <<   __PRETTY_FUNCTION__ << pthread_self() << std::endl;
+#endif
 		req_path = evhttp_request_uri(req);
     	strcpy(req_global, req_path); 
-    	printf("ACCESS:%s\n",req_global);
+    	printf("Access Url:%s\n",req_global);
 		
 		Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
@@ -152,7 +155,7 @@ void init(int nfd) {
 		
 		struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
         //evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
-    	evbuffer_add_printf(OutBuf,content);
+    	evbuffer_add(OutBuf,content,sizeof(content));
     	evhttp_send_reply(req, HTTP_OK, "", OutBuf);
     	
 	}	
@@ -162,25 +165,32 @@ void lunch(int nfd){
 	Worker *worker = new Worker();
 	worker->init(nfd);
 };
+#define PORT_DEFAULT		8080
+#define THREAD_DEFAULT	4
+int main(int argc, char* argv[]) {
+	int port = PORT_DEFAULT;
+	int thread_n = THREAD_DEFAULT;
 
-int main() {
-	//work worker;
+	for (int i=0; i<=argc; i++){
+		if (argv[i] != 0) {
+			if(i ==1){
+				port = std::atoi(argv[i]);
+			}else if(i ==2){
+				thread_n = std::atoi(argv[i]);
+			}			
+		}
+	}
+	
 	int nfd = httpserver_bindsocket(8080,1024);
-    int num = 4;
+    std::cout <<"Thread:" << thread_n << " Port:" << port << std::endl;
     
-    std::thread Threads[4];
-    
-    for(int i=0;i<num;i++){
-   	 	Threads[i] = std::thread(lunch,nfd);
+    std::vector<std::thread>threadList;
+   
+    for(int i=0;i<thread_n;i++){
+    	threadList.push_back(std::thread(lunch,nfd));
     }
-    for(int i=0;i<num;i++){
-    	Threads[i].join();
-    }
-    //std::thread th2(worker,nfd);
-	//th1.join();
-	//th2.join();
-
-    //std::cout << num << std::endl;
-
+    for(auto iter = threadList.begin(); iter != threadList.end(); ++iter){
+    	iter->join();
+  	}
     return 0;
 }
