@@ -46,8 +46,16 @@ int httpserver_bindsocket(int port, int backlog) {
 }
 
 __thread char *req_global;
+__thread int res_code;
 
-
+/*
+ V8 Interface Function
+*/
+void setResponse(const v8::FunctionCallbackInfo<v8::Value>& info) {
+	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
+	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
+	//return v8::Undefined();
+}
 void getUrl(const v8::FunctionCallbackInfo<v8::Value>& info) {
 	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
 	info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
@@ -129,10 +137,15 @@ void init(int nfd,std::string& name) {
 			source = String::NewFromUtf8(isolate,"'Welcome:' + getUrl();");
     	// Compile the source code.
     	script = Script::Compile(source);
-    	
+    	if (script.IsEmpty()) {
+    		std::cout <<"Fail Compile:" << name << std::endl;
+    		return;
+    	}
     	Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
-		std::cout << *utf8 << std::endl;
+#ifdef DEBUG
+		std::cout <<"Init v8 jit result"<< *utf8 << std::endl;
+#endif
 
 		evhttp_set_gencb(httpd,inv,this);
 		event_base_dispatch(base);
@@ -140,7 +153,12 @@ void init(int nfd,std::string& name) {
 	static void inv(struct evhttp_request *req, void *obj){
 		((Worker*)obj)->run(req);
 	}
+	/*
+	* Main Block
+	*/
 	void run(struct evhttp_request *req){
+		res_code = 200;
+	
 		if (req->type != EVHTTP_REQ_GET) {
     	    evhttp_send_error(req, HTTP_BADREQUEST, "Available GET only");
     	    return;
