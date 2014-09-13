@@ -1,6 +1,8 @@
 #include <iostream>
 #include <thread>
 #include "v8.h"
+#include <stdio.h>
+#include <string.h>
 #include <evhttp.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -44,10 +46,13 @@ static void run(struct evhttp_request *req,void *obj){
          evhttp_send_reply(req, HTTP_OK, "", OutBuf);
 }
 
-	static void GetUrl(const FunctionCallbackInfo<Value>& info)
-	{
-		info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
-	}
+__thread char *req_global;
+
+void getUrl(const v8::FunctionCallbackInfo<v8::Value>& info) {
+	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
+	info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
+	//return v8::Undefined();
+}
 
 class Worker{
 
@@ -59,26 +64,20 @@ class Worker{
     Local<Context>  context;
     Local<String> source;
     Local<Script> script;
-
-
+	Local<ObjectTemplate> getUrlObj ;
+	Local<Context> getUrlCtx;
 
 public:
 void init(int nfd) {
-#if 0
-    struct event_base *base;
-	struct evhttp *httpd;
-#endif
+	char *str = "/start";
+	req_global = new char[255];
+	strcpy(req_global, str); 
+	
 	//++num;
 	base = event_init();
 	httpd = evhttp_new(base);
 	evhttp_accept_socket(httpd, nfd);
 	
-#if 0	
-	Isolate* isolate;
-	Local<Context>  context;
-	Local<String> source;
-	Local<Script> script;
-#endif
 	    isolate = Isolate::New();
     	//Locker lock(isolate);
     	Isolate::Scope isolate_scope(isolate);
@@ -92,14 +91,14 @@ void init(int nfd) {
     	// Enter the context for compiling and running the hello world script.
     	Context::Scope context_scope(context);
 
-    	//source = String::NewFromUtf8(isolate,"'Hello' + ', World:' + getUrl();");
-    	source = String::NewFromUtf8(isolate,"'Hello' + ', World:'");
+	    getUrlObj= ObjectTemplate::New(isolate);
+    	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, getUrl));
+    	getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
+    	Context::Scope context_scope2(getUrlCtx);
 
-    	
-    	Local<ObjectTemplate> getUrlObj = ObjectTemplate::New(isolate);
-    	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, GetUrl));
-    	Local<Context> getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
-    	
+    	//source = String::NewFromUtf8(isolate,"'Hello' + ', World:' + getUrl();");
+    	source = String::NewFromUtf8(isolate,"'Hello' + ', World:'+ getUrl();");
+
     	// Compile the source code.
     	script = Script::Compile(source);
     	
@@ -114,17 +113,22 @@ void init(int nfd) {
 		((Worker*)obj)->run(req);
 	}
 	void run(struct evhttp_request *req){
-		Local<Value> result = script->Run();
-		String::Utf8Value utf8(result);
-		std::cout << *utf8 <<   __PRETTY_FUNCTION__ << pthread_self() << std::endl;
+		
+		
+		//std::cout << *utf8 <<   __PRETTY_FUNCTION__ << pthread_self() << std::endl;
 		
 		req_path = evhttp_request_uri(req);
-    	//req_global = (char *)req_path;
-    	printf("ACCESS:%s\n",req_path);
+    	strcpy(req_global, req_path); 
+    	printf("ACCESS:%s\n",req_global);
+		
+		Local<Value> result = script->Run();
+		String::Utf8Value utf8(result);
+		char *content = new char[255];
+    	sprintf(content,"%s\n", *utf8);
 		
 		struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
-        evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
-    	//evbuffer_add_printf(OutBuf,content);
+        //evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
+    	evbuffer_add_printf(OutBuf,content);
     	evhttp_send_reply(req, HTTP_OK, "", OutBuf);
     	
 	}	
