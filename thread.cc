@@ -44,24 +44,24 @@ static void run(struct evhttp_request *req,void *obj){
          evhttp_send_reply(req, HTTP_OK, "", OutBuf);
 }
 
+	static void GetUrl(const FunctionCallbackInfo<Value>& info)
+	{
+		info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
+	}
+
 class Worker{
 
 	struct event_base *base;
     struct evhttp *httpd;
+    const char *req_path;
         
     Isolate* isolate;
     Local<Context>  context;
     Local<String> source;
     Local<Script> script;
 
-#if 0
-static void inv(struct evhttp_request *req, void *obj){
-	work *myClass = reinterpret_cast<work *>(obj);
-    myClass->run(req);
-    return;
-}
 
-#endif
+
 public:
 void init(int nfd) {
 #if 0
@@ -95,9 +95,14 @@ void init(int nfd) {
     	//source = String::NewFromUtf8(isolate,"'Hello' + ', World:' + getUrl();");
     	source = String::NewFromUtf8(isolate,"'Hello' + ', World:'");
 
+    	
+    	Local<ObjectTemplate> getUrlObj = ObjectTemplate::New(isolate);
+    	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, GetUrl));
+    	Local<Context> getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
+    	
     	// Compile the source code.
-
     	script = Script::Compile(source);
+    	
     	Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
 		std::cout << *utf8 << std::endl;
@@ -111,7 +116,11 @@ void init(int nfd) {
 	void run(struct evhttp_request *req){
 		Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
-		std::cout << *utf8 << std::endl;
+		std::cout << *utf8 <<   __PRETTY_FUNCTION__ << pthread_self() << std::endl;
+		
+		req_path = evhttp_request_uri(req);
+    	//req_global = (char *)req_path;
+    	printf("ACCESS:%s\n",req_path);
 		
 		struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
         evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
@@ -131,10 +140,11 @@ int main() {
 	int nfd = httpserver_bindsocket(8080,1024);
     int num = 100;
     std::thread th1(lunch,nfd);
+    std::thread th2(lunch,nfd);
     num++;
     //std::thread th2(worker,nfd);
 	th1.join();
-	//th2.join();
+	th2.join();
 
     std::cout << num << std::endl;
 
