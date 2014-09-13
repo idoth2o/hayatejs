@@ -70,8 +70,8 @@ class Worker{
 	Local<Context> getUrlCtx;
 
 public:
-	int loadScript(){
-	    std::ifstream ifs("test.js");
+	int loadScript(std::string& name){
+	    std::ifstream ifs(name);
     	if (ifs.fail())
     	{
         	std::cerr << "faild" << std::endl;
@@ -89,7 +89,7 @@ public:
     	ifs.close();
     	return EXIT_SUCCESS;
 	}
-void init(int nfd) {
+void init(int nfd,std::string& name) {
     //std::lock_guard<std::mutex> lock(mtx);
 	std::string str = "/start";
 	req_global = new char[255];
@@ -100,7 +100,7 @@ void init(int nfd) {
 	httpd = evhttp_new(base);
 	evhttp_accept_socket(httpd, nfd);
 	
-	if(loadScript() == EXIT_FAILURE)
+	if(loadScript(name) == EXIT_FAILURE)
 		return;
 	
 	    isolate = Isolate::New();
@@ -126,7 +126,7 @@ void init(int nfd) {
 		if(jsScript != NULL)
 			source = String::NewFromUtf8(isolate,jsScript);
 		else
-			source = String::NewFromUtf8(isolate,"'Welcom' + ', World:'+ getUrl();");
+			source = String::NewFromUtf8(isolate,"'Welcome:' + getUrl();");
     	// Compile the source code.
     	script = Script::Compile(source);
     	
@@ -141,33 +141,44 @@ void init(int nfd) {
 		((Worker*)obj)->run(req);
 	}
 	void run(struct evhttp_request *req){
-#ifdef DEBUG
-		std::cout << *utf8 <<   __PRETTY_FUNCTION__ << pthread_self() << std::endl;
-#endif
+		if (req->type != EVHTTP_REQ_GET) {
+    	    evhttp_send_error(req, HTTP_BADREQUEST, "Available GET only");
+    	    return;
+    	}
 		req_path = evhttp_request_uri(req);
     	strcpy(req_global, req_path); 
     	printf("Access Url:%s\n",req_global);
 		
 		Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
-		char *content = new char[255];
+
+#ifdef DEBUG		
+		std::cout <<"Result Length:" << utf8.length() << std::endl;
+#endif
+
+		char *content = new char[utf8.length()+1];
     	sprintf(content,"%s\n", *utf8);
+    	
+#ifdef DEBUG
+		std::cout <<"Result:" << *utf8 << pthread_self() << std::endl;
+#endif
 		
 		struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
         //evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
-    	evbuffer_add(OutBuf,content,sizeof(content));
+    	evbuffer_add(OutBuf,content,strlen(content));
     	evhttp_send_reply(req, HTTP_OK, "", OutBuf);
     	
 	}	
 };
 
-void lunch(int nfd){
+void lunch(int nfd,std::string name){
 	Worker *worker = new Worker();
-	worker->init(nfd);
+	worker->init(nfd,name);
 };
 #define PORT_DEFAULT		8080
 #define THREAD_DEFAULT	4
 int main(int argc, char* argv[]) {
+	std::string scriptName="web.js";
 	int port = PORT_DEFAULT;
 	int thread_n = THREAD_DEFAULT;
 
@@ -175,19 +186,25 @@ int main(int argc, char* argv[]) {
 		if (argv[i] != 0) {
 			if(i ==1){
 				port = std::atoi(argv[i]);
+				if(!(1< port && port <65535))
+					port = PORT_DEFAULT;
 			}else if(i ==2){
 				thread_n = std::atoi(argv[i]);
-			}			
+				if(!(1< thread_n && thread_n <256))
+					thread_n = THREAD_DEFAULT;
+			}else if(i ==3){
+				scriptName = std::string(argv[i]);
+			}		
 		}
 	}
 	
 	int nfd = httpserver_bindsocket(8080,1024);
-    std::cout <<"Thread:" << thread_n << " Port:" << port << std::endl;
+    std::cout <<"Script:" << scriptName<<" Thread:" << thread_n << " Port:" << port << std::endl;
     
     std::vector<std::thread>threadList;
    
     for(int i=0;i<thread_n;i++){
-    	threadList.push_back(std::thread(lunch,nfd));
+    	threadList.push_back(std::thread(lunch,nfd,scriptName));
     }
     for(auto iter = threadList.begin(); iter != threadList.end(); ++iter){
     	iter->join();
