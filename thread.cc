@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <thread>
 #include "v8.h"
 #include <stdio.h>
@@ -59,6 +60,7 @@ class Worker{
 	struct event_base *base;
     struct evhttp *httpd;
     const char *req_path;
+    char *jsScript;
         
     Isolate* isolate;
     Local<Context>  context;
@@ -68,6 +70,23 @@ class Worker{
 	Local<Context> getUrlCtx;
 
 public:
+	int loadScript(){
+	    std::ifstream ifs("test.js");
+    	if (ifs.fail())
+    	{
+        	std::cerr << "faild" << std::endl;
+        	return EXIT_FAILURE;
+    	}
+    	ifs.seekg(0, ifs.end);
+    	int size = static_cast<int>(ifs.tellg());
+    	ifs.seekg(0, ifs.beg);
+    	jsScript = new char[size];
+    	jsScript[size - 1] = '\0';
+    	ifs.read(jsScript, size);
+    	std::cout << "[" << jsScript << "]" << std::endl;
+    	ifs.close();
+    	return EXIT_SUCCESS;
+	}
 void init(int nfd) {
 	char *str = "/start";
 	req_global = new char[255];
@@ -77,6 +96,8 @@ void init(int nfd) {
 	base = event_init();
 	httpd = evhttp_new(base);
 	evhttp_accept_socket(httpd, nfd);
+	
+	loadScript();
 	
 	    isolate = Isolate::New();
     	//Locker lock(isolate);
@@ -97,8 +118,11 @@ void init(int nfd) {
     	Context::Scope context_scope2(getUrlCtx);
 
     	//source = String::NewFromUtf8(isolate,"'Hello' + ', World:' + getUrl();");
-    	source = String::NewFromUtf8(isolate,"'Hello' + ', World:'+ getUrl();");
-
+    	//source = String::NewFromUtf8(isolate,"'Hello' + ', World:'+ getUrl();");
+		if(jsScript != NULL)
+			source = String::NewFromUtf8(isolate,jsScript);
+		else
+			source = String::NewFromUtf8(isolate,"'Welcom' + ', World:'+ getUrl();");
     	// Compile the source code.
     	script = Script::Compile(source);
     	
