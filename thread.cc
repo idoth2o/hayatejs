@@ -60,15 +60,7 @@ static void inv(struct evhttp_request *req, void *obj){
     myClass->run(req);
     return;
 }
-static void inv(struct evhttp_request *req, void *obj){
-	((work*)obj)->run(req);
-}
-void run(struct evhttp_request *req){
-	   	struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
-        evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
-    	//evbuffer_add_printf(OutBuf,content);
-    	evhttp_send_reply(req, HTTP_OK, "", OutBuf);
-}
+
 #endif
 public:
 void init(int nfd) {
@@ -110,9 +102,23 @@ void init(int nfd) {
 		String::Utf8Value utf8(result);
 		std::cout << *utf8 << std::endl;
 
-		evhttp_set_gencb(httpd,run,NULL);
+		evhttp_set_gencb(httpd,inv,this);
 		event_base_dispatch(base);
 	}
+	static void inv(struct evhttp_request *req, void *obj){
+		((Worker*)obj)->run(req);
+	}
+	void run(struct evhttp_request *req){
+		Local<Value> result = script->Run();
+		String::Utf8Value utf8(result);
+		std::cout << *utf8 << std::endl;
+		
+		struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
+        evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
+    	//evbuffer_add_printf(OutBuf,content);
+    	evhttp_send_reply(req, HTTP_OK, "", OutBuf);
+    	
+	}	
 };
 
 void lunch(int nfd){
