@@ -142,15 +142,21 @@ void lunch(int nfd){
 int main() {
 	//work worker;
 	int nfd = httpserver_bindsocket(8080,1024);
-    int num = 100;
-    std::thread th1(lunch,nfd);
-    std::thread th2(lunch,nfd);
-    num++;
+    int num = 4;
+    
+    std::thread Threads[4];
+    
+    for(int i=0;i<num;i++){
+   	 	Threads[i] = std::thread(lunch,nfd);
+    }
+    for(int i=0;i<num;i++){
+    	Threads[i].join();
+    }
     //std::thread th2(worker,nfd);
-	th1.join();
-	th2.join();
+	//th1.join();
+	//th2.join();
 
-    std::cout << num << std::endl;
+    //std::cout << num << std::endl;
 
     return 0;
 }
