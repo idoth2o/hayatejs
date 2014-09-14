@@ -32,7 +32,7 @@ Next generation web Infrastructure.
 	Experimental stage.
 	only support GET Method.
 	
-## Lisense
+## License
 	GPL v2 or Proprietary(T.B.D)
 	
 ## Reference

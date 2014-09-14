@@ -1,3 +1,10 @@
+//============================================================================
+// Name        : hayate.js
+// Author      : .h2o
+// Copyright   : .h2o
+// Description : Next generation web Infrastructure
+// License     : GPL v2 or Proprietary(T.B.D)
+//============================================================================
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -16,7 +23,7 @@
 #include <netinet/in.h>
 
 #define VERSION "0.0.1"
-#define PORT_DEFAULT		8080
+#define PORT_DEFAULT	8080
 #define THREAD_DEFAULT	4
 
 using namespace v8;
@@ -103,8 +110,8 @@ public:
     	ifs.read(jsScript, size);
 #ifdef DEBUG
         {
-            std::lock_guard<std::mutex> lock(cmtx); // mtxを使ってロックする
-            std::cout << "[" << jsScript << "]" << std::endl; // この部分を実行している間は
+            std::lock_guard<std::mutex> lock(cmtx);
+            std::cout << "[" << jsScript << "]" << std::endl; 
         }
 #endif
     	ifs.close();
@@ -155,7 +162,6 @@ void init(int nfd,std::string& name) {
     	if (script.IsEmpty()) {
             v8::TryCatch try_catch;
             v8::String::Utf8Value exception(try_catch.Exception());
-            //String::Utf8Value exception_msg(exception);
             
     		std::cout <<"Fail Compile:" << *exception << std::endl;
     		return;
@@ -210,7 +216,6 @@ void init(int nfd,std::string& name) {
 #ifdef DEBUG
                 std::cout <<"HTTP PARM:"<< key << ":"<< value <<std::endl;
 #endif
-                //                req.forms.insert(std::pair(key,value));
                 
             }
         }
@@ -219,8 +224,6 @@ void init(int nfd,std::string& name) {
             std::string headName;
             std::string headValue;
             headName = "Content-Type";
-//#if 0
-            //if (req.getHeadValue(headName, contenttype) && contenttype =="application/x-www-form-urlencoded") {
                 char * post_data = (char *) EVBUFFER_DATA(req->input_buffer);
                 int bufsize = EVBUFFER_LENGTH(req->input_buffer);
                 
@@ -249,11 +252,9 @@ void init(int nfd,std::string& name) {
 #endif
             }
             
-//#endif
 #ifdef DEBUG		
                 std::cout <<"HTTP POST PARM:" << tmp << std::endl;
 #endif
-            //}
         }
         printf("Access Url:%s\n",req_global);
         
@@ -299,7 +300,6 @@ void init(int nfd,std::string& name) {
         int message_length = strlen(content);
 		snprintf(content_length, 7, "%d", message_length);
 		struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
-        //evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
         evhttp_add_header(req->output_headers, "Content-Type", "text/html");
         evhttp_add_header(req->output_headers, "Content-Length", content_length);
     	evbuffer_add(OutBuf,content,strlen(content));
