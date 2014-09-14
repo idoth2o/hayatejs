@@ -15,6 +15,10 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
+#define VERSION 0.0.1
+#define PORT_DEFAULT		8080
+#define THREAD_DEFAULT	4
+
 using namespace v8;
 
 int httpserver_bindsocket(int port, int backlog) {
@@ -289,13 +293,17 @@ void lunch(int nfd,std::string name){
 	Worker *worker = new Worker();
 	worker->init(nfd,name);
 };
-#define PORT_DEFAULT		8080
-#define THREAD_DEFAULT	4
+
 int main(int argc, char* argv[]) {
 	std::string scriptName="web.js";
 	int port = PORT_DEFAULT;
 	int thread_n = THREAD_DEFAULT;
 
+    if (argc < 2) {
+        std::cout << "version:VERSION" << std::endl;
+        return -1;
+    }
+    
     if (argc < 3) {
         std::cout << "Usage: hayate PortNo threadNo ScriptName" << std::endl;
         return -1;
