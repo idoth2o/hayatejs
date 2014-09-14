@@ -19,13 +19,22 @@ Next generation web Infrastructure.
 	Windows(T.B.D)
 
 ## Usage
-	Run app
-	$./hayate 8080 4 web.js
-	you can connect Server's IP using http protocol.
+	Run app:
+ 	
+	$ ./hayate 8080 4 web.js
+
+	Connect web app:
+
+	$ curl http://127.0.0.1:8080/hello
+	hello World
 	
 ## Status
-	experimental stage.
+	Experimental stage.
 	only support GET Method.
 	
 ## Lisense
 	GPL v2 or Proprietary(T.B.D)
+	
+## Reference
+reference :	https://developers.google.com/v8/get_started
+goog code :	http://kukuruku.co/hub/cpp/lightweight-http-server-in-less-than-40-lines-on-libevent-and-c-11
