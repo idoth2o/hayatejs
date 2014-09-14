@@ -8,7 +8,8 @@ Next generation web Infrastructure.
 ## Feature
 * High performance
 	- Support multithread enviroment.
-
+	- Asynchronous, Non-blocking Server
+	- Native code(Using C++11)
 * simplicity
  	- Internal Web server
   	- Support JavaScript
@@ -38,4 +39,4 @@ Next generation web Infrastructure.
 ## Reference
 reference :	https://developers.google.com/v8/get_started
 
-goog code :	http://kukuruku.co/hub/cpp/lightweight-http-server-in-less-than-40-lines-on-libevent-and-c-11
+good code :	http://kukuruku.co/hub/cpp/lightweight-http-server-in-less-than-40-lines-on-libevent-and-c-11
