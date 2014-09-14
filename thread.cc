@@ -47,19 +47,25 @@ int httpserver_bindsocket(int port, int backlog) {
 
 __thread char *req_global;
 __thread int res_code;
+std::mutex cmtx;
 
 /*
  V8 Interface Function
 */
-void setResponse(const v8::FunctionCallbackInfo<v8::Value>& info) {
-	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
-	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
-	//return v8::Undefined();
+void setResponse(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+    v8::String::Utf8Value utf8(args[0]);
+    char *content = new char[utf8.length()+1];
+    sprintf(content,"%s", *utf8);
+    res_code = std::atoi(content);
+#ifdef DEBUG
+    std::cout << "Response:" << res_code << " Len[" << args.Length() << "]" << std::endl;
+#endif
+    delete content;
+    
 }
-void getUrl(const v8::FunctionCallbackInfo<v8::Value>& info) {
-	//info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),"/start"));
-	info.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
-	//return v8::Undefined();
+void getUrl(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
 }
 
 class Worker{
@@ -92,7 +98,10 @@ public:
     	jsScript[size - 1] = '\0';
     	ifs.read(jsScript, size);
 #ifdef DEBUG
-    	std::cout << "[" << jsScript << "]" << std::endl;
+        {
+            std::lock_guard<std::mutex> lock(cmtx); // mtxを使ってロックする
+            std::cout << "[" << jsScript << "]" << std::endl; // この部分を実行している間は
+        }
 #endif
     	ifs.close();
     	return EXIT_SUCCESS;
@@ -100,7 +109,7 @@ public:
 void init(int nfd,std::string& name) {
     //std::lock_guard<std::mutex> lock(mtx);
 	std::string str = "/start";
-	req_global = new char[255];
+	req_global = new char[1024];
 	strcpy(req_global, str.c_str()); 
 	
 	//++num;
@@ -126,6 +135,7 @@ void init(int nfd,std::string& name) {
 
 	    getUrlObj= ObjectTemplate::New(isolate);
     	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, getUrl));
+        getUrlObj->Set(String::NewFromUtf8(isolate,("setResponse")), FunctionTemplate::New(isolate, setResponse));
     	getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
     	Context::Scope context_scope2(getUrlCtx);
 
@@ -141,15 +151,17 @@ void init(int nfd,std::string& name) {
     		std::cout <<"Fail Compile:" << name << std::endl;
     		return;
     	}
+#if 0
     	Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
 #ifdef DEBUG
 		std::cout <<"Init v8 jit result"<< *utf8 << std::endl;
 #endif
-
+#endif
 		evhttp_set_gencb(httpd,inv,this);
 		event_base_dispatch(base);
 	}
+
 	static void inv(struct evhttp_request *req, void *obj){
 		((Worker*)obj)->run(req);
 	}
@@ -157,35 +169,119 @@ void init(int nfd,std::string& name) {
 	* Main Block
 	*/
 	void run(struct evhttp_request *req){
+        struct evkeyvalq params;
+        struct evkeyval *param;
+        
 		res_code = 200;
 	
-		if (req->type != EVHTTP_REQ_GET) {
+		if (req->type != EVHTTP_REQ_GET && req->type != EVHTTP_REQ_POST) {
     	    evhttp_send_error(req, HTTP_BADREQUEST, "Available GET only");
     	    return;
     	}
 		req_path = evhttp_request_uri(req);
-    	strcpy(req_global, req_path); 
-    	printf("Access Url:%s\n",req_global);
-		
+    	strncpy(req_global, req_path ,1023);
+    	
+        if (req->type == EVHTTP_REQ_GET) {
+            char* ret=0;
+            int pos=0;
+            if ((ret = strchr(req_path,'?')) != NULL ) {
+                pos = ret - req_path;
+                char *uri = new char[pos+1];
+                strncpy(uri, req_path, pos);
+                uri[pos+1] = '\0';
+#ifdef DEBUG
+                std::cout <<"HTTP URI:"<< uri <<std::endl;
+#endif
+                strncpy(req_global, uri ,1023);
+                delete uri;
+            }
+            evhttp_parse_query(req_path,&params);
+            for (param = params.tqh_first; param; param = param->next.tqe_next) {
+                std::string key = std::string(param->key);
+                std::string value = std::string(param->value);
+#ifdef DEBUG
+                std::cout <<"HTTP PARM:"<< key << ":"<< value <<std::endl;
+#endif
+                //                req.forms.insert(std::pair(key,value));
+                
+            }
+        }
+        if (req->type ==  EVHTTP_REQ_POST) {
+            std::string contenttype;
+            std::string headName;
+            std::string headValue;
+            headName = "Content-Type";
+//#if 0
+            //if (req.getHeadValue(headName, contenttype) && contenttype =="application/x-www-form-urlencoded") {
+                char * post_data = (char *) EVBUFFER_DATA(req->input_buffer);
+                int bufsize = EVBUFFER_LENGTH(req->input_buffer);
+                
+                char * tmp = (char *)malloc(bufsize + 5);
+                tmp[0] = '/';
+                tmp[1] = '?';
+                strncpy((char *) &tmp[2], post_data, bufsize);
+                tmp[bufsize + 2] = 0;
+                tmp[bufsize + 3] = 0;
+            
+            struct evkeyvalq *params;
+            struct evkeyval *param;
+            params = evhttp_request_get_input_headers(req);
+            for (param = params->tqh_first; param; param = param->next.tqe_next) {
+                std::string key = std::string(param->key);
+                std::string value = std::string(param->value);
+                if (key.compare("Content-Type") == 0) {
+                    if (value.compare("application/x-www-form-urlencoded") == 0) {
+#ifdef DEBUG
+                        std::cout <<"HTTP POST PARM:"<< tmp <<std::endl;
+#endif
+                    }
+                }
+#ifdef DEBUG
+                std::cout <<"HTTP PARM:"<< key << ":"<< value <<std::endl;
+#endif
+            }
+            
+//#endif
+#ifdef DEBUG		
+                std::cout <<"HTTP POST PARM:" << tmp << std::endl;
+#endif
+            //}
+        }
+        printf("Access Url:%s\n",req_global);
+        
 		Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
 
 #ifdef DEBUG		
-		std::cout <<"Result Length:" << utf8.length() << std::endl;
+		std::cout <<"V8 Result Length:" << utf8.length() << std::endl;
 #endif
 
 		char *content = new char[utf8.length()+1];
     	sprintf(content,"%s\n", *utf8);
     	
 #ifdef DEBUG
-		std::cout <<"Result:" << *utf8 << pthread_self() << std::endl;
+		std::cout <<"V8 Result:" << *utf8 <<" TID:" <<pthread_self() << std::endl;
 #endif
-		
+        switch (res_code) {
+            case 200:
+                break;
+            case 404:
+                evhttp_send_error(req, HTTP_NOTFOUND , "File Not Found");
+                return;
+            default:
+                evhttp_send_error(req, HTTP_INTERNAL , "Internal error");
+                return;
+        }
+        char content_length[8];
+        int message_length = strlen(content);
+		snprintf(content_length, 7, "%d", message_length);
 		struct evbuffer *OutBuf = evhttp_request_get_output_buffer(req);
         //evbuffer_add_printf(OutBuf, "<html><body><center><h1>Hello Wotld!</h1></center></body></html>");
+        evhttp_add_header(req->output_headers, "Content-Type", "text/html");
+        evhttp_add_header(req->output_headers, "Content-Length", content_length);
     	evbuffer_add(OutBuf,content,strlen(content));
     	evhttp_send_reply(req, HTTP_OK, "", OutBuf);
-    	
+        delete content;
 	}	
 };
 
@@ -200,6 +296,11 @@ int main(int argc, char* argv[]) {
 	int port = PORT_DEFAULT;
 	int thread_n = THREAD_DEFAULT;
 
+    if (argc < 3) {
+        std::cout << "Usage: hayate PortNo threadNo ScriptName" << std::endl;
+        return -1;
+    }
+    
 	for (int i=0; i<=argc; i++){
 		if (argv[i] != 0) {
 			if(i ==1){
