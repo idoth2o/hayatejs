@@ -15,7 +15,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
-#define VERSION 0.0.1
+#define VERSION "0.0.1"
 #define PORT_DEFAULT		8080
 #define THREAD_DEFAULT	4
 
@@ -123,7 +123,7 @@ void init(int nfd,std::string& name) {
 	
 	if(loadScript(name) == EXIT_FAILURE)
 		return;
-	
+    
 	    isolate = Isolate::New();
     	//Locker lock(isolate);
     	Isolate::Scope isolate_scope(isolate);
@@ -136,6 +136,9 @@ void init(int nfd,std::string& name) {
 
     	// Enter the context for compiling and running the hello world script.
     	Context::Scope context_scope(context);
+    
+        v8::Handle<v8::String> scname = String::NewFromUtf8(isolate,name.c_str());
+        ScriptOrigin origin(scname);
 
 	    getUrlObj= ObjectTemplate::New(isolate);
     	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, getUrl));
@@ -143,24 +146,25 @@ void init(int nfd,std::string& name) {
     	getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
     	Context::Scope context_scope2(getUrlCtx);
 
-    	//source = String::NewFromUtf8(isolate,"'Hello' + ', World:' + getUrl();");
-    	//source = String::NewFromUtf8(isolate,"'Hello' + ', World:'+ getUrl();");
 		if(jsScript != NULL)
 			source = String::NewFromUtf8(isolate,jsScript);
 		else
 			source = String::NewFromUtf8(isolate,"'Welcome:' + getUrl();");
     	// Compile the source code.
-    	script = Script::Compile(source);
+    	script = Script::Compile(source,&origin);
     	if (script.IsEmpty()) {
-    		std::cout <<"Fail Compile:" << name << std::endl;
+            v8::TryCatch try_catch;
+            v8::String::Utf8Value exception(try_catch.Exception());
+            //String::Utf8Value exception_msg(exception);
+            
+    		std::cout <<"Fail Compile:" << *exception << std::endl;
     		return;
     	}
-#if 0
+    
+#ifdef DEBUG
     	Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
-#ifdef DEBUG
 		std::cout <<"Init v8 jit result"<< *utf8 << std::endl;
-#endif
 #endif
 		evhttp_set_gencb(httpd,inv,this);
 		event_base_dispatch(base);
@@ -254,6 +258,12 @@ void init(int nfd,std::string& name) {
         printf("Access Url:%s\n",req_global);
         
 		Local<Value> result = script->Run();
+        if (result.IsEmpty()){
+            v8::TryCatch try_catch;
+            v8::String::Utf8Value exception(try_catch.Exception());
+
+            std::cout <<"Fail Execute:" << *exception << std::endl;
+        }
 		String::Utf8Value utf8(result);
 
 #ifdef DEBUG		
@@ -296,15 +306,12 @@ void lunch(int nfd,std::string name){
 
 int main(int argc, char* argv[]) {
 	std::string scriptName="web.js";
+    std::string ver = VERSION;
 	int port = PORT_DEFAULT;
 	int thread_n = THREAD_DEFAULT;
 
     if (argc < 2) {
-        std::cout << "version:VERSION" << std::endl;
-        return -1;
-    }
-    
-    if (argc < 3) {
+        std::cout << "Version:" << ver << std::endl;
         std::cout << "Usage: hayate PortNo threadNo ScriptName" << std::endl;
         return -1;
     }
