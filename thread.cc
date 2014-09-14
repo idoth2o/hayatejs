@@ -261,8 +261,17 @@ void init(int nfd,std::string& name) {
         if (result.IsEmpty()){
             v8::TryCatch try_catch;
             v8::String::Utf8Value exception(try_catch.Exception());
-
-            std::cout <<"Fail Execute:" << *exception << std::endl;
+            v8::Handle<v8::Message> message = try_catch.Message();
+            if (message.IsEmpty()) {
+                std::cout <<"Fail Execute:" << *exception << std::endl;
+            }else{
+                //v8::String::Utf8Value filename(message.GetScriptOrigin().ResourceName());
+                int linenum = message->GetLineNumber();
+                std::cout <<"Fail Execute: Line:" << linenum << std::endl;
+            }
+            evhttp_send_error(req, HTTP_INTERNAL , "Internal error");
+            return;
+            
         }
 		String::Utf8Value utf8(result);
 
