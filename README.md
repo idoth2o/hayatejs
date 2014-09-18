@@ -29,6 +29,13 @@ Next generation web Infrastructure.
 	$ curl http://127.0.0.1:8080/hello
 	hello World
 	
+## Javascript Function
+	These js fun are defined for hayate
+	
+	-log()
+	-getUrl()
+	-setResponse()
+	
 ## Status
 	Experimental stage.
 	only support GET Method.

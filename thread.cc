@@ -28,6 +28,13 @@
 
 using namespace v8;
 
+/*
+ Extracts a C string from a V8 Utf8Value.
+ */
+const char* ToCString(const v8::String::Utf8Value& value) {
+    return *value ? *value : "<string conversion failed>";
+}
+
 int httpserver_bindsocket(int port, int backlog) {
   int r;
   int nfd;
@@ -66,17 +73,23 @@ std::mutex cmtx;
 void setResponse(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
     v8::String::Utf8Value utf8(args[0]);
-    char *content = new char[utf8.length()+1];
-    sprintf(content,"%s", *utf8);
-    res_code = std::atoi(content);
+    const char* cstr = ToCString(utf8);
+    res_code = std::atoi(cstr);
 #ifdef DEBUG
     std::cout << "Response:" << res_code << " Len[" << args.Length() << "]" << std::endl;
 #endif
-    delete content;
-    
 }
 void getUrl(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
+}
+
+void log(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::String::Utf8Value str(args[0]);
+    const char* cstr = ToCString(str);
+    {
+        std::lock_guard<std::mutex> lock(cmtx);
+        std::cout << "[Log]" << cstr << std::endl;
+    }
 }
 
 class Worker{
@@ -148,15 +161,17 @@ void init(int nfd,std::string& name) {
         ScriptOrigin origin(scname);
 
 	    getUrlObj= ObjectTemplate::New(isolate);
+        getUrlObj->Set(String::NewFromUtf8(isolate,("log")), FunctionTemplate::New(isolate,log));
     	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, getUrl));
         getUrlObj->Set(String::NewFromUtf8(isolate,("setResponse")), FunctionTemplate::New(isolate, setResponse));
     	getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
     	Context::Scope context_scope2(getUrlCtx);
 
-		if(jsScript != NULL)
+		if(jsScript != nullptr)
 			source = String::NewFromUtf8(isolate,jsScript);
 		else
 			source = String::NewFromUtf8(isolate,"'Welcome:' + getUrl();");
+    
     	// Compile the source code.
     	script = Script::Compile(source,&origin);
     	if (script.IsEmpty()) {
@@ -224,15 +239,16 @@ void init(int nfd,std::string& name) {
             std::string headName;
             std::string headValue;
             headName = "Content-Type";
-                char * post_data = (char *) EVBUFFER_DATA(req->input_buffer);
-                int bufsize = EVBUFFER_LENGTH(req->input_buffer);
-                
-                char * tmp = (char *)malloc(bufsize + 5);
-                tmp[0] = '/';
-                tmp[1] = '?';
-                strncpy((char *) &tmp[2], post_data, bufsize);
-                tmp[bufsize + 2] = 0;
-                tmp[bufsize + 3] = 0;
+            
+            char * post_data = (char *) EVBUFFER_DATA(req->input_buffer);
+            int bufsize = EVBUFFER_LENGTH(req->input_buffer);
+            
+            char * tmp = (char *)malloc(bufsize + 5);
+            tmp[0] = '/';
+            tmp[1] = '?';
+            strncpy((char *) &tmp[2], post_data, bufsize);
+            tmp[bufsize + 2] = 0;
+            tmp[bufsize + 3] = 0;
             
             struct evkeyvalq *params;
             struct evkeyval *param;

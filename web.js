@@ -31,6 +31,7 @@ var WebApp = (function(){
     return WebApp;
 }());
 
+log("start");
 var app = new WebApp("Mini");
 app.get("/","Welcome Index");
 app.get("/hello","hello World");

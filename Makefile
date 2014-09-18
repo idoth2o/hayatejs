@@ -14,7 +14,7 @@ endif
 
 CXX =g++
 LDFLAG=-lv8 -g -levent
-CPPFLAG = -std=c++11
+CPPFLAG=-std=c++0x -Wall
 
 TARGET = hayate
 OBJS =  thread.o 
@@ -33,4 +33,5 @@ $(TARGET): $(OBJS)
 
 .PHONY: clean
 clean :
+	-$(RM) *.o
 	-$(RM) $(TARGET)
