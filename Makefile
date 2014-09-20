@@ -14,7 +14,7 @@ endif
 
 CXX =g++
 LDFLAG=-lv8 -g -levent
-CPPFLAG=-std=c++0x -Wall
+CPPFLAG=-std=c++0x -fpermissive
 
 TARGET = hayate
 OBJS =  thread.o 

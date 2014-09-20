@@ -13,10 +13,11 @@ Next generation web Infrastructure.
 * simplicity
  	- Internal Web server
   	- Support JavaScript
+	- Multi-platform
 
 ## Support
 	OSX 10.9
-	Linux(Not Testing)
+	Linux Ubuntu 12.04 LTS
 	Windows(T.B.D)
 
 ## Usage

@@ -32,6 +32,7 @@ var WebApp = (function(){
 }());
 
 log("start");
+log("PARM NUM:" + getParm());
 var app = new WebApp("Mini");
 app.get("/","Welcome Index");
 app.get("/hello","hello World");

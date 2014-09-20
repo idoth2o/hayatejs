@@ -12,10 +12,12 @@
 #include <cstdlib>
 #include <string>
 #include <typeinfo>
+#include <map>
 
 #include "v8.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <evhttp.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -65,6 +67,8 @@ int httpserver_bindsocket(int port, int backlog) {
 
 __thread char *req_global;
 __thread int res_code;
+__thread int req_parm;
+//thread_local std::map<std::string, std::string> req_parms;
 std::mutex cmtx;
 
 /*
@@ -79,6 +83,13 @@ void setResponse(const v8::FunctionCallbackInfo<v8::Value>& args) {
     std::cout << "Response:" << res_code << " Len[" << args.Length() << "]" << std::endl;
 #endif
 }
+
+void getParm(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    char buff[10];
+    sprintf(buff,"%d",req_parm);
+	args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),buff));
+}
+
 void getUrl(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
 }
@@ -131,7 +142,6 @@ public:
     	return EXIT_SUCCESS;
 	}
 void init(int nfd,std::string& name) {
-    //std::lock_guard<std::mutex> lock(mtx);
 	std::string str = "/start";
 	req_global = new char[1024];
 	strcpy(req_global, str.c_str()); 
@@ -163,6 +173,7 @@ void init(int nfd,std::string& name) {
 	    getUrlObj= ObjectTemplate::New(isolate);
         getUrlObj->Set(String::NewFromUtf8(isolate,("log")), FunctionTemplate::New(isolate,log));
     	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, getUrl));
+        getUrlObj->Set(String::NewFromUtf8(isolate,("getParm")), FunctionTemplate::New(isolate, getParm));
         getUrlObj->Set(String::NewFromUtf8(isolate,("setResponse")), FunctionTemplate::New(isolate, setResponse));
     	getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
     	Context::Scope context_scope2(getUrlCtx);
@@ -198,9 +209,12 @@ void init(int nfd,std::string& name) {
 	* Main Block
 	*/
 	void run(struct evhttp_request *req){
+		std::map<std::string, std::string> req_parms;
+		 
         struct evkeyvalq params;
         struct evkeyval *param;
         
+        req_parm = 0;
 		res_code = 200;
 	
 		if (req->type != EVHTTP_REQ_GET && req->type != EVHTTP_REQ_POST) {
@@ -226,12 +240,13 @@ void init(int nfd,std::string& name) {
             }
             evhttp_parse_query(req_path,&params);
             for (param = params.tqh_first; param; param = param->next.tqe_next) {
+                req_parm++;
                 std::string key = std::string(param->key);
                 std::string value = std::string(param->value);
+                req_parms[key] = value;
 #ifdef DEBUG
                 std::cout <<"HTTP PARM:"<< key << ":"<< value <<std::endl;
 #endif
-                
             }
         }
         if (req->type ==  EVHTTP_REQ_POST) {
