@@ -3,7 +3,7 @@ Next generation web Infrastructure.
 
 ## Prerequisites
 
-- [gcc4.7 or later][libv8][libevent2]
+- [gcc4.7 or later|clang 3.4][libv8][libevent2]
 
 ## Feature
 * High performance

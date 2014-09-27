@@ -65,34 +65,7 @@ int httpserver_bindsocket(int port, int backlog) {
   return nfd;
 }
 
-__thread char *req_global;
-__thread int res_code;
-__thread int req_parm;
-//thread_local std::map<std::string, std::string> req_parms;
 std::mutex cmtx;
-
-/*
- V8 Interface Function
-*/
-void setResponse(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::HandleScope handle_scope(args.GetIsolate());
-    v8::String::Utf8Value utf8(args[0]);
-    const char* cstr = ToCString(utf8);
-    res_code = std::atoi(cstr);
-#ifdef DEBUG
-    std::cout << "Response:" << res_code << " Len[" << args.Length() << "]" << std::endl;
-#endif
-}
-
-void getParm(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    char buff[10];
-    sprintf(buff,"%d",req_parm);
-	args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),buff));
-}
-
-void getUrl(const v8::FunctionCallbackInfo<v8::Value>& args) {
-	args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),req_global));
-}
 
 void log(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::String::Utf8Value str(args[0]);
@@ -104,11 +77,17 @@ void log(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 class Worker{
-	//std::mutex mtx;
+    //Interface v8 - naitave
+    char *req_global;
+    int res_code;
+    int req_parm;
+    std::map<std::string, std::string> req_parms;
+    //std::mutex mtx;
 	
 	struct event_base *base;
     struct evhttp *httpd;
     const char *req_path;
+    
     char *jsScript;
         
     Isolate* isolate;
@@ -119,6 +98,35 @@ class Worker{
 	Local<Context> getUrlCtx;
 
 public:
+    /*
+     V8 Interface Function
+     */
+    static void getParm(const v8::FunctionCallbackInfo<v8::Value>& args) {
+        Isolate* isolate = Isolate::GetCurrent();
+        Worker *p = (Worker *)isolate->GetData(0);
+        char buff[10];
+        sprintf(buff,"%d",p->req_parm);
+        args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),buff));
+    }
+    static void getUrl(const v8::FunctionCallbackInfo<v8::Value>& args) {
+        Isolate* isolate = Isolate::GetCurrent();
+        Worker *p = (Worker *)isolate->GetData(0);
+#ifdef DEBUG
+        std::cout << "[Path]" << p->req_path << std::endl;
+#endif
+        args.GetReturnValue().Set(String::NewFromUtf8(Isolate::GetCurrent(),p->req_path));
+    }
+    static void setResponse(const v8::FunctionCallbackInfo<v8::Value>& args) {
+        Isolate* isolate = Isolate::GetCurrent();
+        Worker *p = (Worker *)isolate->GetData(0);
+        v8::HandleScope handle_scope(isolate);
+        v8::String::Utf8Value utf8(args[0]);
+        const char* cstr = ToCString(utf8);
+        p->res_code = std::atoi(cstr);
+#ifdef DEBUG
+        std::cout << "Response:" << res_code << " Len[" << args.Length() << "]" << std::endl;
+#endif
+    }
 	int loadScript(std::string& name){
 	    std::ifstream ifs(name);
     	if (ifs.fail())
@@ -157,6 +165,7 @@ void init(int nfd,std::string& name) {
 	    isolate = Isolate::New();
     	//Locker lock(isolate);
     	Isolate::Scope isolate_scope(isolate);
+        isolate->SetData(0,this);
 
     	// Create a stack-allocated handle scope.
     	HandleScope handle_scope(isolate);
@@ -172,9 +181,9 @@ void init(int nfd,std::string& name) {
 
 	    getUrlObj= ObjectTemplate::New(isolate);
         getUrlObj->Set(String::NewFromUtf8(isolate,("log")), FunctionTemplate::New(isolate,log));
-    	getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, getUrl));
-        getUrlObj->Set(String::NewFromUtf8(isolate,("getParm")), FunctionTemplate::New(isolate, getParm));
-        getUrlObj->Set(String::NewFromUtf8(isolate,("setResponse")), FunctionTemplate::New(isolate, setResponse));
+        getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, Worker::getUrl));
+        getUrlObj->Set(String::NewFromUtf8(isolate,("getParm")), FunctionTemplate::New(isolate, Worker::getParm));
+        getUrlObj->Set(String::NewFromUtf8(isolate,("setResponse")), FunctionTemplate::New(isolate, Worker::setResponse));
     	getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
     	Context::Scope context_scope2(getUrlCtx);
 
@@ -209,8 +218,6 @@ void init(int nfd,std::string& name) {
 	* Main Block
 	*/
 	void run(struct evhttp_request *req){
-		std::map<std::string, std::string> req_parms;
-		 
         struct evkeyvalq params;
         struct evkeyval *param;
         
