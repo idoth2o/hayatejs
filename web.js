@@ -3,25 +3,22 @@ var WebApp = (function(){
     // constructor
     function WebApp(name){
         this._name = name;
-		this._flag = false;
-		this._body = "";
+		this._route = {};
     }
 
     // public method
     function get(path,body){
-        var url = getUrl();
-		if(url == path){
-			this._flag =true;
-			this._body =body;
-			setResponse(200);
-		}
+		this._route[path] = body;
     }
     function listen(){
-		if(this._flag == false){
+    	var url = getUrl();
+    	var cur = this._route[url];
+		if( cur == undefined){
         	setResponse(404);
 			return "";
 		}
-		return this._body;
+		setResponse(200);
+		return cur;
     }   	
     WebApp.prototype = {
         constructor: WebApp,
@@ -31,9 +28,9 @@ var WebApp = (function(){
     return WebApp;
 }());
 
-log("start");
-log("PARM NUM:" + getParm());
 var app = new WebApp("Mini");
 app.get("/","Welcome Index");
 app.get("/hello","hello World");
+
 app.listen();
+

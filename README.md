@@ -3,12 +3,13 @@ Next generation web Infrastructure.
 
 ## Prerequisites
 
-- [gcc4.7 or later|clang 3.4][libv8][libevent2]
+- [gcc4.7 or clang 3.4|later][libv8][libevent2]
 
 ## Feature
 * High performance
 	- Support multithread enviroment.
 	- Asynchronous, Non-blocking Server
+	- Native Web Server
 	- Native code(Using C++11)
 * simplicity
  	- Internal Web server

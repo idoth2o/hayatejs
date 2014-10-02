@@ -24,7 +24,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
-#define VERSION "0.0.1"
+#define VERSION "0.0.2"
 #define PORT_DEFAULT	8080
 #define THREAD_DEFAULT	4
 
@@ -101,6 +101,24 @@ public:
     /*
      V8 Interface Function
      */
+    static void getParms(const v8::FunctionCallbackInfo<v8::Value>& args) {
+        Isolate* isolate = Isolate::GetCurrent();
+        Worker *p = (Worker *)isolate->GetData(0);
+        v8::Local<v8::Object> obj = v8::Object::New(isolate);
+        
+        //for (std::map<std::string, std::string>::iterator it = p->req_parms.begin();
+        for (decltype(req_parms)::iterator it = p->req_parms.begin();
+            it != p->req_parms.end(); it++) {
+            // イテレータは pair<const string, int> 型なので、
+            std::string strKey = it->first ;     // イテレータからキーが得られる。
+            std::string strVal = it->second;     // イテレータから値が得られる。
+            obj->Set(
+                     String::NewFromUtf8(isolate, strKey.c_str(),String::kNormalString,strlen(strKey.c_str())),
+                     String::NewFromUtf8(isolate, strVal.c_str(),String::kNormalString,strlen(strVal.c_str()))
+            );
+        }
+        args.GetReturnValue().Set(obj);
+    }
     static void getParm(const v8::FunctionCallbackInfo<v8::Value>& args) {
         Isolate* isolate = Isolate::GetCurrent();
         Worker *p = (Worker *)isolate->GetData(0);
@@ -124,7 +142,7 @@ public:
         const char* cstr = ToCString(utf8);
         p->res_code = std::atoi(cstr);
 #ifdef DEBUG
-        std::cout << "Response:" << res_code << " Len[" << args.Length() << "]" << std::endl;
+        std::cout << "Response:" << p->res_code << " Len[" << args.Length() << "]" << std::endl;
 #endif
     }
 	int loadScript(std::string& name){
@@ -183,6 +201,7 @@ void init(int nfd,std::string& name) {
         getUrlObj->Set(String::NewFromUtf8(isolate,("log")), FunctionTemplate::New(isolate,log));
         getUrlObj->Set(String::NewFromUtf8(isolate,("getUrl")), FunctionTemplate::New(isolate, Worker::getUrl));
         getUrlObj->Set(String::NewFromUtf8(isolate,("getParm")), FunctionTemplate::New(isolate, Worker::getParm));
+        getUrlObj->Set(String::NewFromUtf8(isolate,("getParms")), FunctionTemplate::New(isolate, Worker::getParms));
         getUrlObj->Set(String::NewFromUtf8(isolate,("setResponse")), FunctionTemplate::New(isolate, Worker::setResponse));
     	getUrlCtx = Context::New(isolate, nullptr, getUrlObj);
     	Context::Scope context_scope2(getUrlCtx);
@@ -202,7 +221,7 @@ void init(int nfd,std::string& name) {
     		return;
     	}
     
-#ifdef DEBUG
+#ifdef RAW_DEBUG
     	Local<Value> result = script->Run();
 		String::Utf8Value utf8(result);
 		std::cout <<"Init v8 jit result"<< *utf8 << std::endl;
@@ -244,16 +263,18 @@ void init(int nfd,std::string& name) {
 #endif
                 strncpy(req_global, uri ,1023);
                 delete uri;
-            }
-            evhttp_parse_query(req_path,&params);
-            for (param = params.tqh_first; param; param = param->next.tqe_next) {
-                req_parm++;
-                std::string key = std::string(param->key);
-                std::string value = std::string(param->value);
-                req_parms[key] = value;
+ 
+                evhttp_parse_query(req_path,&params);
+                for (param = params.tqh_first; param; param = param->next.tqe_next) {
+                    req_parm++;
+                    std::string key = std::string(param->key);
+                    std::string value = std::string(param->value);
+                    req_parms[key] = value;
 #ifdef DEBUG
-                std::cout <<"HTTP PARM:"<< key << ":"<< value <<std::endl;
+                    std::cout <<"HTTP PARM:"<< key << ":"<< value <<std::endl;
 #endif
+                }
+//                std::cout << "[Pasre Size]" << req_parms.size() << std::endl;
             }
         }
         if (req->type ==  EVHTTP_REQ_POST) {
